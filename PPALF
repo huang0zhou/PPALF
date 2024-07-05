@@ -1,0 +1,133 @@
+import pandas as pd
+import itertools
+
+# 读取数据
+p301s = pd.read_csv('/home/huanghz/data/huanghz/protein_pair_alf/protein_protein_pair_center/ms_p301s.txt', delimiter='\t') #proteomics data
+mouse_mirna_target = pd.read_csv('/home/huanghz/data/huanghz/protein_pair_alf/protein_protein_pair_center/mouse_miRNA_targets.txt', delimiter='\t')  # microRNAs-mRNAs
+p301s_mirna_fc = pd.read_csv('/home/huanghz/data/huanghz/protein_pair_alf/protein_protein_pair_center/p301s_mirna_fc.txt', delimiter='\t')  microRNAs fold change
+p301s_mirna_fc_exp = pd.read_csv('/home/huanghz/data/huanghz/protein_pair_alf/protein_protein_pair_center/p301s_mirna_fold_expression.txt', delimiter='\t')
+# 获取列数
+num_col = len(p301s.columns)
+print(num_col)
+
+
+num_rows = len(p301s)    
+ 
+
+row_index = 0   
+
+for n in range(0, num_rows - 3):  # 这里改为从0开始到num_rows-1，避免索引错误    
+    
+    mirna_for_target_n = mouse_mirna_target[mouse_mirna_target['Gene_Symbol'] == p301s.iloc[n,0]]
+    
+    mirna_for_fold_changes = []
+    mirna_for_fold_changes_exp = []
+    for mir in mirna_for_target_n['miR_Family']:
+        mirna_for_fold_changes += p301s_mirna_fc.loc[p301s_mirna_fc['mirna'] == mir, 'Fold_Change'].tolist()
+        mirna_for_fold_changes_exp += p301s_mirna_fc_exp.loc[p301s_mirna_fc_exp['mirna'] == mir, 'fold_expression'].tolist()
+    mirna_for_n_mean = sum(mirna_for_fold_changes) / len(mirna_for_fold_changes) if mirna_for_fold_changes else 0
+    mirna_for_fc_exp_total = sum(mirna_for_fold_changes_exp) if mirna_for_fold_changes_exp else 0
+    p301s.loc[row_index, "mean_mirna_fc"] = mirna_for_n_mean
+    p301s.loc[row_index, "mean_mirna_fc_exp"] = mirna_for_fc_exp_total
+    p301s.loc[row_index, "number_mirna"] = len(mirna_for_fold_changes)
+
+        
+    row_index += 1  
+    print(n)  
+
+# 保存更新后的 DataFrame 到新的 txt 文件中
+output_file_path = '/home/huanghz/data/huanghz/protein_pair_alf/protein_protein_pair_center/updated_ms_p301s.txt'
+p301s.to_csv(output_file_path, sep='\t', index=False)
+
+#PPALF
+import numpy as np
+import pandas as pd
+import math 
+import os 
+
+# 读取第一个文件  
+p301s = pd.read_csv('/home/huanghz/data/huanghz/protein_pair_alf/protein_protein_pair_center/updated_ms_p301s.txt, delimiter='\t')  
+#print(bjab)  
+# 读取第二个文件  
+mouse_mirna_target = pd.read_csv('~/data/huanghz/protein_pair_alf/mouse_miRNA_targets.txt', delimiter='\t')
+p301s_col1 = p301s['Gene names'] 
+
+column_data = human_mirna_target['miR_Family']
+column_data = column_data.drop_duplicates()  
+
+def log2_abs(x):  
+    # 判断正负数，然后取绝对值  
+    if x < 0:  
+        x = -x  
+    # 计算log2  
+    return math.log2(x) 
+
+
+df_dict = {}  # 初始化字典  
+for element in column_data:
+
+    result = mouse_mirna_target[mouse_mirna_target['miR_Family'] == element]['Gene name']  
+    
+    # 打印结果  
+    # print(element)
+    
+    df_dict[element] = result
+    mask = p301s_col1.isin(df_dict[element])  
+    mir_result = p301s[mask]  
+    mir_result = mir_result.reset_index(drop=True)
+    # print(mir_result)
+    num_col = len(mir_result.columns) 
+    # print(num_col)  
+    mir_dict = {}  # 初始化字典  
+    
+    for a in range(1, num_col-3):   
+        ms_df_sub = mir_result.iloc[:, [0, a,7,8,9]]  
+        print(ms_df_sub)  
+        num_rows = len(ms_df_sub)    
+        pp_rows = num_rows * (num_rows - 1) // 2  # 使用//进行整数除法    
+        ms_df_pp = pd.DataFrame(columns=["Pair", ("Ratio_"+ms_df_sub.columns[1]),"mirna_fc_n","mirna_fc_m"], index=range(pp_rows))    
+        row_index = 0    
+        for n in range(0, num_rows - 1):  # 这里改为从0开始到num_rows-1，避免索引错误    
+            for m in range(n + 1, num_rows-1):  # 从n+1开始，避免重复计算    
+                ms_df_pp.loc[row_index, "Pair"] = f"{ms_df_sub.iloc[n, 0]}-{ms_df_sub.iloc[m, 0]}"    
+                ms_df_pp.loc[row_index, ("Ratio_"+ms_df_sub.columns[1])] = ms_df_sub.iloc[n, 1] / ms_df_sub.iloc[m, 1]
+                ms_df_pp.loc[row_index, "mirna_fc_n"] = ms_df_sub.iloc[n, 2] 
+                ms_df_pp.loc[row_index, "mirna_fc_m"] = ms_df_sub.iloc[m, 2]
+                ms_df_pp.loc[row_index, "mirna_fc_exp_n"] = ms_df_sub.iloc[n, 3]
+                ms_df_pp.loc[row_index, "mirna_fc_exp_m"] = ms_df_sub.iloc[m, 3]
+                ms_df_pp.loc[row_index, "number_mirna_n"] = ms_df_sub.iloc[n, 4] 
+                ms_df_pp.loc[row_index, "number_mirna_m"] = ms_df_sub.iloc[m, 4]    
+                row_index += 1  
+            print(n)  
+        mir_dict['pp_'+element+ms_df_sub.columns[1]] = ms_df_pp  # 将计算结果添加到字典中
+    # 先合并前两个DataFrame  
+
+
+    df_dict[element]=pd.merge(mir_dict['pp_'+element+'P301S1'],mir_dict['pp_'+element+'P301S2'],how='left')
+    
+    df_dict[element]=pd.merge(df_dict[element],mir_dict['pp_'+element+'P301S3'],how='left')
+    
+    
+    df_dict[element]=pd.merge(df_dict[element],mir_dict['pp_'+element+'C57_1'],how='left')
+    df_dict[element]=pd.merge(df_dict[element],mir_dict['pp_'+element+'C57_2'],how='left')
+    df_dict[element]=pd.merge(df_dict[element],mir_dict['pp_'+element+'C57_3'],how='left')
+  
+    # 先计算分子和分母  
+    numerator = df_dict[element]['Ratio_P301S1'] + \
+        df_dict[element]['Ratio_P301S2'] + \
+            df_dict[element]['Ratio_P301S3'] 
+
+                 
+                 
+    
+    denominator = df_dict[element]['Ratio_C57_1'] + \
+        df_dict[element]['Ratio_C57_2'] +  \
+            df_dict[element]['Ratio_C57_3'] 
+                 
+    df_dict[element][f'{element}_fc'] = numerator / denominator
+    pp_fc=pd.DataFrame(df_dict[element][f'{element}_fc'])
+    df_dict[element][f'{element}_alf'] = pp_fc.applymap(lambda x: abs(math.log2(x)))
+    folder_path = '~/data/huanghz/protein_pair_alf/protein_protein_pair_center'
+    
+    
+    df_dict[element].to_csv(folder_path + '/'+ f'{element}_p301s_protein_ppalf_associated_mirna.csv', index=False)
